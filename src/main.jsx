@@ -16,7 +16,7 @@ const FOOD_GROUPS = [
   { label:"🍓 Obst & Gemüse",         items:["Erdbeeren","Tomaten","Zitrusfrüchte","Kiwi","Spinat / Aubergine","Sellerie"] },
   { label:"🍫 Sonstiges",             items:["Schokolade / Kakao","Nüsse (Baum)","Hefe / Fermentiertes","Künstliche Farbstoffe","Konservierungsstoffe","Fertiggerichte"] },
 ];
-const MEDICATIONS     = ["Sana Cutan Salbe","Linola Fett","Elidel","Kortisoncreme","Cetirizin","Feuchte Wickel"];
+const MEDICATIONS     = ["Sana Cutan Salbe","Linola Fett","Elidel","Kortisoncreme","Cetirizin","Feuchte Wickel","Sonnencreme"];
 const SEVERITY_LABELS = ["","Sehr gut 🌿","Gut 😊","Mittel 😐","Schlecht 😟","Sehr schlecht 😣"];
 const SLEEP_LABELS    = ["","Super (7h+)","Gut (6–7h)","Unterbrochen","Schlecht (<5h)"];
 const POLLEN_LABELS   = ["Keine","Gering","Mäßig","Hoch","Sehr hoch"];
@@ -154,6 +154,8 @@ function App() {
     const storedL = lsGet(LOC_KEY);
     if (stored)  setEntries(stored);
     if (storedL) setLocation(storedL);
+    // Request persistent storage so the browser won't auto-evict our data
+    navigator.storage?.persist?.();
   }, []);
 
   const loadEnv = useCallback(async (lat, lon, date) => {
@@ -195,6 +197,35 @@ function App() {
 
   function loadEntry(e) { setForm({...e}); setView("log"); }
 
+  function exportData() {
+    const blob = new Blob([JSON.stringify(entries, null, 2)], {type:"application/json"});
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.download = `hauttagebuch-${todayStr()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function importData(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = evt => {
+      try {
+        const imported = JSON.parse(evt.target.result);
+        if (!Array.isArray(imported)) return;
+        const byDate = {};
+        [...entries, ...imported].forEach(entry => { byDate[entry.date] = entry; });
+        const updated = Object.values(byDate).sort((a,b)=>b.date.localeCompare(a.date));
+        lsSet(STORAGE_KEY, updated);
+        setEntries(updated);
+      } catch {}
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  }
+
   // ── Insights ──────────────────────────────────────────────
   const insights = (() => {
     if (entries.length < 3) return null;
@@ -220,6 +251,7 @@ function App() {
   })();
 
   const pNames = {birch:"Birke",alder:"Erle",grass:"Gräser",mugwort:"Beifuß"};
+  const btnStyle = {padding:"8px 16px",borderRadius:10,border:"1.5px solid #d4b8a0",background:"white",fontSize:12,color:"#5a4a40",cursor:"pointer",fontFamily:"Lato,sans-serif"};
 
   return (
     <div style={{fontFamily:"'Georgia',serif",background:"#fdf7f0",minHeight:"100vh",color:"#3a2e28"}}>
@@ -333,7 +365,19 @@ function App() {
         </>)}
 
         {/* ── HISTORY ── */}
-        {view==="history" && (
+        {view==="history" && (<>
+          <Card>
+            <ST>Datensicherung</ST>
+            <div style={{display:"flex",gap:8,marginBottom:8}}>
+              <button onClick={exportData} style={btnStyle} disabled={entries.length===0}>⬇ Exportieren</button>
+              <label style={{...btnStyle,display:"inline-block"}}>
+                ⬆ Importieren
+                <input type="file" accept=".json" onChange={importData} style={{display:"none"}} />
+              </label>
+            </div>
+            <div style={{fontSize:11,color:"#9a8478",fontFamily:"Lato,sans-serif"}}>Daten als JSON sichern oder auf neuem Gerät wiederherstellen</div>
+          </Card>
+
           <Card>
             <ST>Alle Einträge ({entries.length})</ST>
             {entries.length===0&&<div style={{color:"#9a8478",fontSize:14,fontFamily:"Lato,sans-serif",padding:"10px 0"}}>Noch keine Einträge.</div>}
@@ -358,7 +402,7 @@ function App() {
               );
             })}
           </Card>
-        )}
+        </>)}
 
         {/* ── INSIGHTS ── */}
         {view==="insights" && (<>
